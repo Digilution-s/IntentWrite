@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 

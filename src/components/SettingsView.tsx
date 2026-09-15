@@ -112,6 +112,182 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [showAddConnection, setShowAddConnection] = useState(false);
   const [newConnType, setNewConnType] = useState('Ghost CMS');
 
+  // Website Connection / Publishing Test State
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [connectionTestStatus, setConnectionTestStatus] = useState<
+    'idle' | 'success' | 'auth_failed' | 'not_configured' | 'unreachable' | 'error'
+  >('idle');
+  const [connectionTestTitle, setConnectionTestTitle] = useState('');
+  const [connectionTestMessage, setConnectionTestMessage] = useState('');
+  const [lastTestedTime, setLastTestedTime] = useState<string | null>(null);
+
+  const formatTestedDate = (isoString: string): string => {
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return isoString;
+    }
+  };
+
+  // Load existing website connection status on mount / website change
+  // Note: Following Rule 6, we NEVER read or select website_connections.credentials
+  useEffect(() => {
+    let isMounted = true;
+    async function loadWebsiteConnection() {
+      if (!isSupabaseConfigured() || !website?.id) return;
+      try {
+        const { data, error } = await supabase
+          .from('website_connections')
+          .select('id, website_id, platform, connection_type, status, last_tested_at, last_error')
+          .eq('website_id', website.id)
+          .maybeSingle();
+
+        if (isMounted && data) {
+          if (data.status === 'connected') {
+            setConnectionTestStatus('success');
+            setConnectionTestTitle('Connected');
+          } else if (data.status === 'error') {
+            setConnectionTestStatus('unreachable');
+            setConnectionTestTitle('Connection Error');
+            if (data.last_error) {
+              setConnectionTestMessage(data.last_error);
+            }
+          }
+          if (data.last_tested_at) {
+            setLastTestedTime(formatTestedDate(data.last_tested_at));
+          }
+        }
+      } catch (err) {
+        console.warn('Could not query website connection status:', err);
+      }
+    }
+    loadWebsiteConnection();
+    return () => {
+      isMounted = false;
+    };
+  }, [website?.id]);
+
+  const handleTestConnection = async () => {
+    setIsTestingConnection(true);
+    setConnectionTestStatus('idle');
+    setConnectionTestTitle('');
+    setConnectionTestMessage('');
+
+    try {
+      // 1. Get the current Supabase Auth session from the existing shared Supabase client
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+
+      if (!accessToken || sessionError) {
+        setConnectionTestStatus('auth_failed');
+        setConnectionTestTitle('Authentication failed');
+        setConnectionTestMessage('Please sign in to test your website publishing connection.');
+        return;
+      }
+
+      // 2. Get the current/selected website_id from existing application state
+      let selectedWebsiteId = website.id;
+
+      // Ensure website_id corresponds to the persisted Supabase record if website.id was a local temp string
+      if (session.user?.id) {
+        try {
+          const { data: dbWebsites } = await supabase
+            .from('websites')
+            .select('id, url')
+            .eq('user_id', session.user.id)
+            .limit(10);
+
+          if (dbWebsites && dbWebsites.length > 0) {
+            const matched =
+              dbWebsites.find((w: any) => w.id === website.id) ||
+              dbWebsites.find((w: any) => website.url && w.url === website.url) ||
+              dbWebsites[0];
+            if (matched?.id) {
+              selectedWebsiteId = matched.id;
+            }
+          }
+        } catch (err) {
+          console.warn('Supabase website lookup note:', err);
+        }
+      }
+
+      // 3. Send POST /api/publishing/test-connection with Authorization header and website_id
+      const response = await fetch('/api/publishing/test-connection', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          website_id: selectedWebsiteId,
+        }),
+      });
+
+      let resData: any = null;
+      try {
+        resData = await response.json();
+      } catch {
+        resData = null;
+      }
+
+      // 4. Handle response status codes
+      if (response.status === 200) {
+        // 200 -> show "Connected"
+        setConnectionTestStatus('success');
+        setConnectionTestTitle('Connected');
+        const testedTime = resData?.tested_at
+          ? formatTestedDate(resData.tested_at)
+          : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setLastTestedTime(testedTime);
+        setConnectionTestMessage(
+          resData?.message || 'Website connection verified successfully.'
+        );
+        if (wpDest && !wpDest.connected) {
+          publishingConnectionsService.setConnected(wpDest.id, true);
+        }
+      } else if (response.status === 401) {
+        // 401 -> show "Authentication failed"
+        setConnectionTestStatus('auth_failed');
+        setConnectionTestTitle('Authentication failed');
+        setConnectionTestMessage(
+          resData?.error || 'Invalid or expired user session. Please sign in again.'
+        );
+      } else if (response.status === 404) {
+        // 404 -> show "No connection configured"
+        setConnectionTestStatus('not_configured');
+        setConnectionTestTitle('No connection configured');
+        setConnectionTestMessage(
+          resData?.error || 'No connection configured for this website.'
+        );
+      } else if (response.status === 502) {
+        // 502 -> show "Client website unreachable/rejected connection"
+        setConnectionTestStatus('unreachable');
+        setConnectionTestTitle('Client website unreachable/rejected connection');
+        setConnectionTestMessage(
+          resData?.details || resData?.error || 'Client website was unreachable or rejected the connection test.'
+        );
+      } else {
+        // other errors -> show useful error message
+        setConnectionTestStatus('error');
+        setConnectionTestTitle('Connection error');
+        setConnectionTestMessage(
+          resData?.error || resData?.message || `Connection test failed with HTTP status ${response.status}.`
+        );
+      }
+    } catch (err: any) {
+      console.error('Test connection error:', err);
+      setConnectionTestStatus('error');
+      setConnectionTestTitle('Connection error');
+      setConnectionTestMessage(
+        err?.message || 'Network error occurred while testing connection. Please try again.'
+      );
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
   // Autonomous 48h AI Agent State
   const [agentConfig, setAgentConfig] = useState(() => deepSeekAgentService.getConfig());
   const [agentScheduledHour, setAgentScheduledHour] = useState(agentConfig.scheduledHour || '06:00');
@@ -486,14 +662,70 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         {/* SECTION 2: PUBLISHING CONNECTIONS */}
         <div className="rounded-3xl border border-neutral-200/80 bg-white p-6 sm:p-8 shadow-sm">
-          <div className="pb-6 border-b border-neutral-100 mb-6">
-            <h2 className="text-base font-semibold text-neutral-900">Publishing Destinations</h2>
-            <p className="text-xs text-neutral-500 mt-0.5">
-              Connect CMS endpoints or webhook destinations to push scheduled and published articles automatically.
-            </p>
+          <div className="pb-6 border-b border-neutral-100 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold text-neutral-900">Publishing Destinations</h2>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Connect CMS endpoints or webhook destinations to push scheduled and published articles automatically.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                id="test-publishing-connection-btn"
+                type="button"
+                onClick={handleTestConnection}
+                disabled={isTestingConnection}
+                className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white hover:bg-neutral-50 active:scale-95 px-4 py-2 text-xs font-medium text-neutral-700 shadow-2xs transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isTestingConnection ? (
+                  <Loader2 className="w-3.5 h-3.5 text-[#ef4d23] animate-spin" />
+                ) : (
+                  <Radio className="w-3.5 h-3.5 text-[#ef4d23]" />
+                )}
+                <span>{isTestingConnection ? 'Testing Connection...' : 'Test Connection'}</span>
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4">
+            {/* Status overview / Result banner */}
+            {connectionTestStatus !== 'idle' && (
+              <div
+                className={`rounded-2xl p-4 text-xs border ${
+                  connectionTestStatus === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : connectionTestStatus === 'not_configured'
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  {connectionTestStatus === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : connectionTestStatus === 'not_configured' ? (
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-xs">{connectionTestTitle}</span>
+                      {lastTestedTime && (
+                        <span className="text-[11px] opacity-80 shrink-0 flex items-center gap-1">
+                          <Clock className="w-3 h-3 inline" />
+                          <span>Last tested: {lastTestedTime}</span>
+                        </span>
+                      )}
+                    </div>
+                    {connectionTestMessage && (
+                      <p className="text-[11px] leading-relaxed mt-1 opacity-90">{connectionTestMessage}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* WordPress Destination */}
             <div className="rounded-2xl border border-neutral-200/80 bg-[#f5f2ee] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -505,22 +737,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <p className="text-[11px] text-neutral-500">
                     Direct publishing to WP Posts with SEO metadata and featured image upload.
                   </p>
+                  {lastTestedTime && connectionTestStatus === 'success' && (
+                    <p className="text-[11px] text-emerald-700 mt-0.5 flex items-center gap-1 font-medium">
+                      <Check className="w-3 h-3" />
+                      <span>Verified & Active · Last tested {lastTestedTime}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 self-end sm:self-center">
+              <div className="flex items-center gap-2.5 self-end sm:self-center">
                 <span
-                  className={`inline-flex items-center gap-1 text-xs font-medium ${
-                    wpConnected ? 'text-emerald-700' : 'text-neutral-500'
+                  className={`inline-flex items-center gap-1 text-xs font-medium mr-1 ${
+                    (connectionTestStatus === 'success' || wpConnected) ? 'text-emerald-700' : 'text-neutral-500'
                   }`}
                 >
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${
-                      wpConnected ? 'bg-emerald-500' : 'bg-neutral-400'
+                      (connectionTestStatus === 'success' || wpConnected) ? 'bg-emerald-500' : 'bg-neutral-400'
                     }`}
                   />
-                  <span>{wpConnected ? 'Connected' : 'Not connected'}</span>
+                  <span>
+                    {connectionTestStatus === 'success'
+                      ? 'Connected'
+                      : wpConnected
+                      ? 'Connected'
+                      : 'Not connected'}
+                  </span>
                 </span>
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={isTestingConnection}
+                  className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors shadow-2xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isTestingConnection ? (
+                    <Loader2 className="h-3 w-3 text-[#ef4d23] animate-spin" />
+                  ) : null}
+                  <span>Test Connection</span>
+                </button>
                 <button
                   type="button"
                   onClick={() =>
