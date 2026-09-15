@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { processScheduledArticles } from './publishing-service.js';
+import { processScheduledArticles } from './_publishing-service.js';
 
 /**
  * ============================================================
