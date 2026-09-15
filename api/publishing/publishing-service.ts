@@ -637,16 +637,3 @@ export async function processScheduledArticles(
   };
 }
 
-/**
- * Fallback handler in case Vercel attempts to bundle this file as a standalone API route.
- * Real endpoints are at /api/publishing/publish-article and /api/publishing/process-scheduled.
- */
-export default async function handler(req: any, res: any) {
-  if (res && typeof res.status === 'function') {
-    return res.status(404).json({
-      success: false,
-      error: 'publishing-service is an internal service module, not a public HTTP endpoint.'
-    });
-  }
-}
-
