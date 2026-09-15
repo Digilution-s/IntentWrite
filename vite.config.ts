@@ -215,6 +215,50 @@ Products/Services: "${website.products || ''}"`,
               }
             });
           });
+
+          server.middlewares.use('/api/publishing/publish-article', async (req, res) => {
+            if (req.method !== 'POST') {
+              res.statusCode = 405;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: 'Method not allowed', allowed_methods: ['POST'] }));
+              return;
+            }
+
+            let body = '';
+            req.on('data', (chunk) => {
+              body += chunk;
+            });
+
+            req.on('end', async () => {
+              try {
+                let parsedBody = {};
+                try {
+                  parsedBody = JSON.parse(body || '{}');
+                } catch {
+                  parsedBody = {};
+                }
+                (req as any).body = parsedBody;
+
+                const vercelRes: any = res;
+                vercelRes.status = function(code: number) {
+                  res.statusCode = code;
+                  return this;
+                };
+                vercelRes.json = function(data: any) {
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify(data));
+                  return this;
+                };
+
+                const publishArticleHandler = (await import('./api/publishing/publish-article')).default;
+                await publishArticleHandler(req as any, vercelRes);
+              } catch (err: any) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: err.message || 'Server error' }));
+              }
+            });
+          });
         },
       },
     ],

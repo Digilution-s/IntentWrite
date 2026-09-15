@@ -1,4 +1,5 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
+import 'dotenv/config';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
 /**
@@ -275,7 +276,24 @@ export default async function handler(
     });
   }
 
-  if (!connection) {
+  let activeConnection = connection;
+  if (!activeConnection) {
+    const { data: fallbackConn } = await adminClient
+      .from('website_connections')
+      .select(
+        'id, website_id, user_id, platform, connection_type, credentials, configuration, status'
+      )
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (fallbackConn) {
+      activeConnection = fallbackConn;
+    }
+  }
+
+  if (!activeConnection) {
     return res.status(404).json({
       success: false,
       error:
@@ -288,12 +306,12 @@ export default async function handler(
   // ==========================================================
 
   if (
-    connection.platform !== 'custom_api'
+    activeConnection.platform !== 'custom_api'
   ) {
     return res.status(400).json({
       success: false,
       error:
-        `Platform "${connection.platform}" is not yet supported by this publishing endpoint.`
+        `Platform "${activeConnection.platform}" is not yet supported by this publishing endpoint.`
     });
   }
 
@@ -302,10 +320,10 @@ export default async function handler(
   // ==========================================================
 
   const credentials =
-    connection.credentials || {};
+    activeConnection.credentials || {};
 
   const configuration =
-    connection.configuration || {};
+    activeConnection.configuration || {};
 
   const apiUrl =
     typeof configuration.api_url === 'string'
@@ -380,10 +398,14 @@ export default async function handler(
       article.title,
 
     slug:
-      article.slug,
+      article.slug ||
+      (article.title || 'article').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
 
     content:
-      article.content,
+      article.content ||
+      article.article_html ||
+      article.excerpt ||
+      article.title,
 
     excerpt:
       article.excerpt || '',

@@ -567,11 +567,29 @@ export default function App() {
   };
 
   // Publishing
-  const handleConfirmPublish = async () => {
+  const handleConfirmPublish = async (updatedArticle?: Article) => {
+    if (updatedArticle) {
+      setActiveArticle(updatedArticle);
+      setArticles((prev) =>
+        prev.map((a) => (a.id === updatedArticle.id ? updatedArticle : a))
+      );
+      contentService.updateArticle(updatedArticle.id, updatedArticle);
+      if (user?.id) {
+        fetchUserArticles(user.id).then((freshArts) => {
+          if (freshArts && freshArts.length > 0) {
+            setArticles(freshArts);
+          }
+        });
+      }
+      return {
+        publishedUrl: updatedArticle.publishedUrl || '',
+      };
+    }
+
     if (!activeArticle) return { publishedUrl: '' };
     const result = contentService.publishArticle(
       activeArticle.id,
-      'Blog - WordPress'
+      'Blog'
     );
     setActiveArticle(result.article);
     setArticles(contentService.getArticles());
@@ -829,9 +847,11 @@ export default function App() {
             setIsPublishOpen(false);
             handleStartCreateContent();
           }}
-          onViewPublished={() => {
+          onViewPublished={(url) => {
             setIsPublishOpen(false);
-            setIsPreviewOpen(true);
+            if (!url) {
+              setIsPreviewOpen(true);
+            }
           }}
         />
       )}
