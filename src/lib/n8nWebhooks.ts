@@ -34,6 +34,7 @@ export interface TriggerWebsiteAnalyzeResult {
   message: string;
   data?: any;
   isTestModeWaiting?: boolean;
+  isBackgroundProcessing?: boolean;
 }
 
 /**
@@ -108,6 +109,18 @@ export async function triggerWebsiteAnalyzeWebhook(
         };
       }
 
+      // 524 is Cloudflare timeout: Origin received the request and is still processing,
+      // but Cloudflare cut off the HTTP connection after 100 seconds of waiting.
+      if (result.status === 524) {
+        return {
+          success: true,
+          status: 524,
+          isBackgroundProcessing: true,
+          message: 'Website analysis was received and is currently processing in the background.',
+          data: errData,
+        };
+      }
+
       return {
         success: false,
         status: result.status,
@@ -156,6 +169,16 @@ export async function triggerWebsiteAnalyzeWebhook(
         isTestModeWaiting: true,
         message:
           'Analysis service is in test mode. Please start the test session and try again.',
+        data: directData,
+      };
+    }
+
+    if (directRes.status === 524) {
+      return {
+        success: true,
+        status: 524,
+        isBackgroundProcessing: true,
+        message: 'Website analysis was received and is currently processing in the background.',
         data: directData,
       };
     }

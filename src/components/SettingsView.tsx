@@ -225,11 +225,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       );
 
       if (result.success) {
-        setReanalyzeStatus({
-          type: 'success',
-          message: 'Website analysis started successfully!',
-          details: 'Our research engine has received your website details and began analyzing content topics.',
-        });
+        if (result.isBackgroundProcessing) {
+          setReanalyzeStatus({
+            type: 'notice',
+            message: 'Website analysis is processing in the background',
+            details:
+              'Your server received the request and is analyzing your website. (The operation took over 100s, so the network connection closed while n8n finishes processing).',
+          });
+        } else {
+          setReanalyzeStatus({
+            type: 'success',
+            message: 'Website analysis started successfully!',
+            details: 'Our research engine has received your website details and began analyzing content topics.',
+          });
+        }
 
         const updated: Website = {
           ...currentWebsiteData,
