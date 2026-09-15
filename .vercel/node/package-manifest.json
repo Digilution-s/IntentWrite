@@ -189,7 +189,6 @@
       "name": "vite",
       "type": "direct",
       "scopes": [
-        "dev",
         "prod"
       ],
       "requested": "^6.2.3",

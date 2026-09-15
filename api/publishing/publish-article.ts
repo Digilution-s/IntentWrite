@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { publishArticle } from './publishing-service';
+import { publishArticle } from './publishing-service.js';
 
 /**
  * ============================================================
