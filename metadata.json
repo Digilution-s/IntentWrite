@@ -1,0 +1,6 @@
+{
+  "name": "IntentWrite",
+  "description": "AI-powered SEO and AEO content research, generation, and publishing platform for modern businesses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
