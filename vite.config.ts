@@ -259,6 +259,53 @@ Products/Services: "${website.products || ''}"`,
               }
             });
           });
+
+          server.middlewares.use('/api/publishing/process-scheduled', async (req, res) => {
+            const handleRequest = async (bodyText: string) => {
+              try {
+                const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+                (req as any).query = Object.fromEntries(parsedUrl.searchParams.entries());
+
+                let parsedBody = {};
+                try {
+                  parsedBody = JSON.parse(bodyText || '{}');
+                } catch {
+                  parsedBody = {};
+                }
+                (req as any).body = parsedBody;
+
+                const vercelRes: any = res;
+                vercelRes.status = function(code: number) {
+                  res.statusCode = code;
+                  return this;
+                };
+                vercelRes.json = function(data: any) {
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify(data));
+                  return this;
+                };
+
+                const processScheduledHandler = (await import('./api/publishing/process-scheduled')).default;
+                await processScheduledHandler(req as any, vercelRes);
+              } catch (err: any) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: err.message || 'Server error' }));
+              }
+            };
+
+            if (req.method === 'GET' || req.method === 'HEAD') {
+              await handleRequest('');
+            } else {
+              let body = '';
+              req.on('data', (chunk) => {
+                body += chunk;
+              });
+              req.on('end', async () => {
+                await handleRequest(body);
+              });
+            }
+          });
         },
       },
     ],
