@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { DatabaseContentJob, DatabaseArticle, Article, ArticleSection, SourceCitation } from '../types';
+import { getContentGenerateWebhookUrl } from '../services/webhookEnvService';
 
 export interface CreateContentJobInput {
   websiteId: string;
@@ -113,6 +114,7 @@ export async function triggerContentGeneration(jobId: string): Promise<{ success
   }
 
   const webhookUrl = (
+    getContentGenerateWebhookUrl() ||
     (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_N8N_CONTENT_GENERATE_WEBHOOK : '') ||
     ''
   ).trim();

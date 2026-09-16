@@ -29,6 +29,8 @@ import {
   triggerWebsiteAnalyzeWebhook,
   getWebsiteAnalyzeWebhookUrl,
 } from '../lib/n8nWebhooks';
+import { useWebhookEnv } from '../services/webhookEnvService';
+import { WebhookEnvToggle } from './WebhookEnvToggle';
 
 interface SettingsViewProps {
   website: Website;
@@ -333,10 +335,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // Supabase & n8n Backend State (from environment variables)
   const supabaseUrl = getSupabaseUrl();
-  const n8nWebhookUrl = (
-    (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_N8N_CONTENT_GENERATE_WEBHOOK : '') ||
-    ''
-  ).trim();
+  const { mode: webhookEnvMode, url: activeWebhookUrl, isProduction: isWebhookProd } = useWebhookEnv();
   const n8nWebsiteAnalyzeWebhookUrl = getWebsiteAnalyzeWebhookUrl();
   const [isTestingSupabase, setIsTestingSupabase] = useState(false);
   const [supabaseTestStatus, setSupabaseTestStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -1072,18 +1071,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-neutral-800 mb-1.5">
-                  Content Generation Engine
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                  <label className="block text-xs font-semibold text-neutral-800">
+                    Content Generation Webhook ({webhookEnvMode.toUpperCase()})
+                  </label>
+                  <WebhookEnvToggle id="settings-webhook-env-toggle" />
+                </div>
                 <p className="text-[11px] text-neutral-400 mb-2">
-                  Dispatches multi-agent research, drafting, and search-intent optimization jobs.
+                  Dispatches multi-agent research, drafting, and search-intent optimization jobs to n8n ({webhookEnvMode === 'production' ? 'Production Endpoint' : 'Test Endpoint'}).
                 </p>
-                <input
-                  type="text"
-                  readOnly
-                  value={n8nWebhookUrl ? 'Configured & Active' : 'Default Engine Active'}
-                  className="w-full rounded-2xl border border-neutral-200 bg-neutral-100/70 px-4 py-2.5 text-xs text-neutral-700 cursor-default focus:outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    readOnly
+                    value={activeWebhookUrl}
+                    className="w-full rounded-2xl border border-neutral-200 bg-neutral-100/70 px-4 py-2.5 text-xs text-neutral-700 font-mono focus:outline-none"
+                  />
+                  <span
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      isWebhookProd
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {isWebhookProd ? 'Production' : 'Test Mode'}
+                  </span>
+                </div>
               </div>
             </div>
 

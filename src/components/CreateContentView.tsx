@@ -8,6 +8,7 @@ import {
   TrendingTopic,
 } from '../types';
 import { deepSeekAgentService } from '../services/deepSeekAgentService';
+import { WebhookEnvToggle } from './WebhookEnvToggle';
 
 interface CreateContentViewProps {
   website: Website;
@@ -140,9 +141,15 @@ export const CreateContentView: React.FC<CreateContentViewProps> = ({
       <div className="rounded-3xl border border-neutral-200/80 bg-white p-6 sm:p-8 shadow-sm">
         {/* Header */}
         <div className="mb-8">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#ef4d23]/10 border border-[#ef4d23]/20 px-3 py-1 text-xs font-medium text-[#ef4d23] mb-3">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>AI Content Studio</span>
+          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-[#ef4d23]/10 border border-[#ef4d23]/20 px-3 py-1 text-xs font-medium text-[#ef4d23]">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>AI Content Studio</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium text-neutral-400">Webhook:</span>
+              <WebhookEnvToggle id="create-content-webhook-env-toggle" />
+            </div>
           </div>
           <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-neutral-900 mb-2">
             What should we <span className="font-serif italic font-normal text-neutral-800">write about?</span>

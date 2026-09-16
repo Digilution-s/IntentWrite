@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Website, User } from '../types';
 import { FlowerLogo } from './landing/FlowerLogo';
+import { WebhookEnvToggle } from './WebhookEnvToggle';
 
 interface NavigationProps {
   currentTab?: 'dashboard' | 'content' | 'settings';
@@ -195,6 +196,9 @@ export const Navigation: React.FC<NavigationProps> = ({
             </button>
           )}
 
+          {/* Webhook Environment Mode Toggle (Test vs Production) */}
+          <WebhookEnvToggle />
+
           {/* Website selector dropdown */}
           <div className="relative">
             <button
@@ -369,6 +373,11 @@ export const Navigation: React.FC<NavigationProps> = ({
               )}
             </button>
           )}
+
+          <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-neutral-50 border border-neutral-200/80 mb-2">
+            <span className="text-[11px] font-medium text-neutral-600">Generation Webhook</span>
+            <WebhookEnvToggle id="mobile-webhook-env-toggle-btn" />
+          </div>
 
           <button
             onClick={() => {

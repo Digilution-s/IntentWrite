@@ -4,6 +4,8 @@
  * sources appear as eligible publishing destinations across the application.
  */
 
+import { getContentGenerateWebhookUrl } from './webhookEnvService';
+
 export interface PublishingDestination {
   id: string;
   name: string;
@@ -50,12 +52,18 @@ class PublishingConnectionsService {
    * Get all registered publishing destinations from storage
    */
   public getDestinations(): PublishingDestination[] {
+    const activeWebhook = getContentGenerateWebhookUrl();
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((d: PublishingDestination) => {
+            if (d.id === 'webhook' && (!d.endpointUrl || d.endpointUrl.includes('kuhaanelectric.com/webhook'))) {
+              return { ...d, endpointUrl: activeWebhook };
+            }
+            return d;
+          });
         }
       }
     } catch (err) {
@@ -63,12 +71,19 @@ class PublishingConnectionsService {
     }
 
     // Default initialization
+    const defaults = DEFAULT_DESTINATIONS.map((d) => {
+      if (d.id === 'webhook') {
+        return { ...d, endpointUrl: activeWebhook };
+      }
+      return d;
+    });
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DESTINATIONS));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
     } catch {
       // ignore
     }
-    return DEFAULT_DESTINATIONS;
+    return defaults;
   }
 
   /**
